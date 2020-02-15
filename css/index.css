@@ -37,3 +37,8 @@ body {
 
 .bg-green { background-color: #EEFFEE; }
 .bg-red { background-color: #FFEEEE; }
+
+.center-item {
+  float: none;
+  margin: auto;
+}

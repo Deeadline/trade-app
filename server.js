@@ -19,7 +19,7 @@ var config = {};
 try {
     var content = fs.readFileSync('config.json');
     config = JSON.parse(content);
-} catch(ex) {
+} catch (ex) {
     console.error(ex.message);
     process.exit(1);
 }
@@ -31,22 +31,22 @@ httpServer.on('request', function (req, rep) {
     var appCookies = new cookies(req, rep);
     var session = appCookies.get('session');
     var now = Date.now();
-    if(!session || !common.sessions[session]) {
+    if (!session || !common.sessions[session]) {
         session = uuid();
-        common.sessions[session] = { from: req.connection.remoteAddress, created: now, touched: now };
+        common.sessions[session] = {from: req.connection.remoteAddress, created: now, touched: now};
     } else {
         common.sessions[session].from = req.connection.remoteAddress;
-        common.sessions[session].touched = now;    
+        common.sessions[session].touched = now;
     }
-    appCookies.set('session', session, { httpOnly: false });
+    appCookies.set('session', session, {httpOnly: false});
 
     console.log('<<< ' + req.method + ' ' + req.url + ' [' + session + ']');
 
     var parsedUrl = qs.parseUrl(req.url);
-    if(req.method == 'POST' || req.method == 'PUT') {
+    if (req.method == 'POST' || req.method == 'PUT') {
         /* requests with payload will be redirected to rest */
-        lib.payload2JSON(req, rep, function(req, rep, payload, err) {
-            if(err) {
+        lib.payload2JSON(req, rep, function (req, rep, payload, err) {
+            if (err) {
                 lib.sendJSONWithError(rep, 400, err.text);
             } else {
                 rest(parsedUrl.url, req, rep, parsedUrl.query, payload, session);
@@ -55,16 +55,18 @@ httpServer.on('request', function (req, rep) {
         return;
     }
 
-    switch(parsedUrl.url) {
+    switch (parsedUrl.url) {
 
         /* static content server */
         case '/':
-            lib.serveStaticContent(rep, 'html/index.html'); break;
+            lib.serveStaticContent(rep, 'html/index.html');
+            break;
         case '/favicon.ico':
-            lib.serveStaticContent(rep, 'img/favicon.ico'); break;
+            lib.serveStaticContent(rep, 'img/favicon.ico');
+            break;
         default:
             /* file server */
-            if(/^\/(html|css|js|fonts|img)\//.test(parsedUrl.url)) {
+            if (/^\/(html|css|js|fonts|img)\//.test(parsedUrl.url)) {
                 lib.serveStaticContent(rep, '.' + parsedUrl.url);
             } else {
                 /* not static content, try rest without payload */
@@ -74,16 +76,16 @@ httpServer.on('request', function (req, rep) {
 
 });
 
-common.ws = new WebSocket.Server({ server: httpServer });
+common.ws = new WebSocket.Server({server: httpServer});
 
 common.ws.on('connection', function connection(conn) {
-	conn.on('message', function(data) {
+    conn.on('message', function (data) {
         console.log('<<< retrieving data from websocket: ' + data);
         try {
             var message = JSON.parse(data);
-            switch(message.action) {
+            switch (message.action) {
                 case 'init':
-                    if(message.session && common.sessions[message.session]) {
+                    if (message.session && common.sessions[message.session]) {
                         console.log('Session ids consistent, websocket initialization for session ' + message.session);
                         common.sessions[message.session].ws = conn;
                         conn.session = message.session;
@@ -92,10 +94,10 @@ common.ws.on('connection', function connection(conn) {
                 default:
                     console.log('Unknown action sent from websocket: ' + message.action);
             }
-        } catch(ex) {
+        } catch (ex) {
             console.log('Invalid message from websocket: ' + data);
         }
-	}); 
+    });
 });
 
 /* main */
@@ -106,15 +108,54 @@ common.ws.on('connection', function connection(conn) {
 //     process.exit(1);
 // });
 
-mongodb.MongoClient.connect(config.db, { useNewUrlParser: true, useUnifiedTopology: true }, function(err, conn) {
-    if(err) {
+mongodb.MongoClient.connect(config.db, {useNewUrlParser: true, useUnifiedTopology: true}, function (err, conn) {
+    if (err) {
         console.error('Connection to ' + config.db + ' failed: ' + err.name);
         process.exit(2);
     }
     var db = conn.db(config.dbName);
-    common.accounts = db.collection('accounts');
-    common.history = db.collection('history');
-    console.log('Connection with ' + config.db + ' established');
-    httpServer.listen(config.port);
-    console.log("HTTP server is listening on the port " + config.port);
+    var accounts = db.collection('accounts');
+    var history = db.collection('history');
+    var conclusions = db.collection('conclusions');
+    console.log('clearing database');
+    history.drop();
+    accounts.drop();
+    conclusions.drop();
+    var accountCollection = [
+        {
+            email: 'jim@beam.com',
+            password: 'admin1',
+            role: 'Pracownicy banku',
+            balance: 1000,
+            limit: 0
+        },
+        {
+            email: 'jim1@beam.com',
+            password: 'admin2',
+            role: 'Klient',
+            balance: 1500,
+            limit: 0
+        }
+    ];
+    var historyCollection = [
+        {
+            email: 'jim@beam.com',
+            password: 'admin1'
+        },
+        {
+            email: 'jim1@beam.com',
+            password: 'admin2'
+        }
+    ];
+    accounts.insertMany(accountCollection)
+        .then(function () {
+            return history.insertMany(historyCollection);
+        }).then(function () {
+        common.accounts = accounts;
+        common.history = history;
+        common.conclusions = conclusions;
+        console.log('Connection with ' + config.db + ' established');
+        httpServer.listen(config.port);
+        console.log("HTTP server is listening on the port " + config.port);
+    });
 });

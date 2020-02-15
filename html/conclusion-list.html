@@ -1,0 +1,35 @@
+<h3>Lista wniosków</h3>
+Rekordów <span ng-bind="ctrl.conclusions.length"></span> / <span ng-bind="ctrl.conclusionsCount"></span>
+<input class="form-inline" type="number" placeholder="Limit" ng-model="ctrl.limit"
+       ng-change="ctrl.refreshConclusions()"/>
+<input class="form-inline" type="text" placeholder="Filtruj" ng-model="ctrl.filter"
+       ng-change="ctrl.refreshConclusions()"/>
+<select name="statusSelect" id="repeatSelect" ng-model="ctrl.status" ng-change="ctrl.refreshConclusions()">
+    <option ng-repeat="status in statuses" value="{{status.name}}">
+        {{status.name}}
+    </option>
+</select>
+
+<table class="table table-hover">
+    <tr>
+        <th style="text-align: left;">Data</th>
+        <th style="text-align: center;">Email</th>
+        <th style="text-align: right;">Kwota</th>
+        <th style="text-align: right;">Status</th>
+        <th style="text-align: right;"></th>
+    </tr>
+    <tr ng-repeat="entry in ctrl.conclusions">
+        <td ng-bind="ctrl.stamp2date(entry.date)"></td>
+        <td style="text-align: center;" ng-bind="entry.email"></td>
+        <td style="text-align: right;" ng-bind="entry.amount"></td>
+        <td style="text-align: right;" ng-bind="entry.status"></td>
+        <td>
+            <button class="btn btn-success" ng-click="ctrl.accept(entry)"
+                    style="margin-right: 5px; margin-left: 5px;"
+                    ng-if="entry.status == 'Rejected' || entry.status == 'None'">
+                Zaakceptuj
+            </button>
+            <button class="btn btn-danger" ng-click="ctrl.reject(entry)" ng-if="entry.status == 'None'">Odrzuć</button>
+        </td>
+    </tr>
+</table>

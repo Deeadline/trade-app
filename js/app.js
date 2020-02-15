@@ -1,88 +1,144 @@
 var app = angular.module("app", ['ngSanitize', 'ngRoute', 'ngAnimate', 'ngWebSocket', 'ui.bootstrap', 'nvd3']);
-
+var roles = {
+    workers: 'Pracownicy banku',
+    clients: 'Klient'
+};
 // zmienne globalne
 app.value('globals', {
-    email: ''
+    email: null,
+    role: null
 });
 
 // nowe podstrony i ich kontrolery
+app.constant('ROLES', roles);
 app.constant('routes', [
-	{ route: '/', templateUrl: '/html/home.html', controller: 'Home', controllerAs: 'ctrl', menu: '<i class="fa fa-lg fa-home"></i>', guest: true },
-	{ route: '/transfer', templateUrl: '/html/transfer.html', controller: 'Transfer', controllerAs: 'ctrl', menu: 'Przelew' },
-    { route: '/history', templateUrl: '/html/history.html', controller: 'History', controllerAs: 'ctrl', menu: 'Historia' },
-    { route: '/trend', templateUrl: '/html/trend.html', controller: 'Trend', controllerAs: 'ctrl', menu: 'Trend' }    
+    {
+        route: '/',
+        templateUrl: '/html/home.html',
+        controller: 'Home',
+        controllerAs: 'ctrl',
+        menu: '<i class="fa fa-lg fa-home"></i>',
+        guest: true,
+        roles: [roles.workers, roles.clients]
+    },
+    {
+        route: '/conclusion',
+        templateUrl: '/html/conclusion.html',
+        controller: 'Conclusion',
+        controllerAs: 'ctrl',
+        menu: 'Złóż wniosek',
+        guest: true,
+        roles: []
+    },
+    {
+        route: '/transfer',
+        templateUrl: '/html/transfer.html',
+        controller: 'Transfer',
+        controllerAs: 'ctrl',
+        menu: 'Przelew',
+        roles: [roles.workers, roles.clients]
+    },
+    {
+        route: '/history',
+        templateUrl: '/html/history.html',
+        controller: 'History',
+        controllerAs: 'ctrl',
+        menu: 'Historia',
+        roles: [roles.workers, roles.clients]
+    },
+    {
+        route: '/trend',
+        templateUrl: '/html/trend.html',
+        controller: 'Trend',
+        controllerAs: 'ctrl',
+        menu: 'Trend',
+        roles: [roles.workers, roles.clients]
+    },
+    {
+        route: '/conclusions',
+        templateUrl: '/html/conclusion-list.html',
+        controller: 'ConclusionList',
+        controllerAs: 'ctrl',
+        menu: 'Wnioski',
+        roles: [roles.workers]
+    }
 ]);
 
-app.config(['$routeProvider', '$locationProvider', 'routes', function($routeProvider, $locationProvider, routes) {
+app.config(['$routeProvider', '$locationProvider', 'routes', 'ROLES', function ($routeProvider, $locationProvider, routes, roles) {
     $locationProvider.hashPrefix('');
-	for(var i in routes) {
-		$routeProvider.when(routes[i].route, routes[i]);
-	}
-	$routeProvider.otherwise({ redirectTo: '/' });
+    for (var i in routes) {
+        $routeProvider.when(routes[i].route, routes[i]);
+    }
+    $routeProvider.otherwise({redirectTo: '/'});
 }]);
 
-app.controller("loginDialog", [ '$http', '$uibModalInstance', function($http, $uibModalInstance) {
+app.controller("loginDialog", ['$http', '$uibModalInstance', function ($http, $uibModalInstance) {
     var ctrl = this;
     // devel: dla szybszego logowania
-    ctrl.creds = { email: 'jim@beam.com', password: 'admin1' };
+    ctrl.creds = {email: 'jim@beam.com', password: 'admin1'};
     ctrl.loginError = false;
 
-    ctrl.tryLogin = function() {
+    ctrl.tryLogin = function () {
         $http.post('/login', ctrl.creds).then(
-            function(rep) {
-                $uibModalInstance.close(rep.data.email);
+            function (rep) {
+                $uibModalInstance.close(rep.data);
             },
-            function(err) {
+            function (err) {
                 ctrl.loginError = true;
             }
         );
     };
 
-    ctrl.cancel = function() {
+    ctrl.cancel = function () {
         $uibModalInstance.dismiss('cancel');
     };
 
 }]);
 
 app.controller('Menu', ['$http', '$rootScope', '$scope', '$location', '$uibModal', '$websocket', 'routes', 'globals', 'common',
-	function($http, $rootScope, $scope, $location, $uibModal, $websocket, routes, globals, common) {
+    function ($http, $rootScope, $scope, $location, $uibModal, $websocket, routes, globals, common) {
         var ctrl = this;
-
         ctrl.alert = common.alert;
         ctrl.menu = [];
 
-        var refreshMenu = function() {
+        var refreshMenu = function () {
             ctrl.menu = [];
             for (var i in routes) {
-                if(routes[i].guest || globals.email) {
+                if (routes[i].roles.includes(globals.role)) {
+                    ctrl.menu.push({route: routes[i].route, title: routes[i].menu});
+                } else if (globals.email == null && routes[i].guest) {
                     ctrl.menu.push({route: routes[i].route, title: routes[i].menu});
                 }
             }
         };
 
         $http.get('/login').then(
-            function(rep) { 
+            function (rep) {
                 globals.email = rep.data.email;
+                globals.role = rep.data.role;
                 refreshMenu();
 
                 try {
                     var dataStream = $websocket('ws://' + window.location.host);
-                    dataStream.onMessage(function(rep) {
+                    dataStream.onMessage(function (rep) {
                         try {
                             var message = JSON.parse(rep.data);
-                            for(var topic in message) {
+                            for (var topic in message) {
                                 $rootScope.$broadcast(topic, message[topic]);
                             }
-                        } catch(ex) {
+                        } catch (ex) {
                             console.error('Data from websocket cannot be parsed: ' + rep.data);
                         }
                     });
                     dataStream.send(JSON.stringify({action: 'init', session: rep.data.session}));
-                } catch(ex) {
+                } catch (ex) {
                     console.error('Initialization of websocket communication failed');
                 }
             },
-            function(err) { globals.email = null; }
+            function (err) {
+                globals.email = null;
+                globals.role = null;
+            }
         );
 
         ctrl.isCollapsed = true;
@@ -91,28 +147,33 @@ app.controller('Menu', ['$http', '$rootScope', '$scope', '$location', '$uibModal
             ctrl.isCollapsed = true;
         });
 
-		ctrl.navClass = function(page) {
-			return page === $location.path() ? 'active' : '';
-		}
+        ctrl.navClass = function (page) {
+            return page === $location.path() ? 'active' : '';
+        }
 
-		ctrl.loginIcon = function() {
-			return globals.email ? globals.email + '&nbsp;<span class="fa fa-lg fa-sign-out"></span>' : '<span class="fa fa-lg fa-sign-in"></span>';
-		}
+        ctrl.loginIcon = function () {
+            return globals.email ? globals.email + '&nbsp;<span class="fa fa-lg fa-sign-out"></span>' : '<span class="fa fa-lg fa-sign-in"></span>';
+        }
 
-        ctrl.login = function() {
-            if(globals.email) {
-                common.confirm({ title: 'Koniec pracy?', body: 'Chcesz wylogować ' + globals.email + '?' }, function(answer) {
-                    if(answer) {    
+        ctrl.login = function () {
+            if (globals.email) {
+                common.confirm({
+                    title: 'Koniec pracy?',
+                    body: 'Chcesz wylogować ' + globals.email + '?'
+                }, function (answer) {
+                    if (answer) {
                         $http.delete('/login').then(
-                            function(rep) {
+                            function (rep) {
                                 globals.email = null;
+                                globals.role = null;
                                 refreshMenu();
                                 $location.path('/');
                             },
-                            function(err) {}
+                            function (err) {
+                            }
                         );
                     }
-                });    
+                });
             } else {
                 var modalInstance = $uibModal.open({
                     animation: true,
@@ -123,24 +184,28 @@ app.controller('Menu', ['$http', '$rootScope', '$scope', '$location', '$uibModal
                     controllerAs: 'ctrl'
                 });
                 modalInstance.result.then(
-                    function(data) {
-                        globals.email = data;
+                    function (data) {
+                        globals.email = data.email;
+                        globals.role = data.role;
                         refreshMenu();
                         $location.path('/');
                     });
-            }};
+            }
+        };
 
-        ctrl.closeAlert = function() { ctrl.alert.text = ""; };
-}]);
+        ctrl.closeAlert = function () {
+            ctrl.alert.text = "";
+        };
+    }]);
 
 /*
     common.confirm( { title: title, body: body, noOk: false, noCancel: false } , function(answer) { ... } )
     common.showMessage( message )
     common.showError( message )
 */
-app.service('common', [ '$uibModal', 'globals', function($uibModal, globals) {
+app.service('common', ['$uibModal', 'globals', function ($uibModal, globals) {
 
-    this.confirm = function(confirmOptions, callback) {
+    this.confirm = function (confirmOptions, callback) {
 
         var modalInstance = $uibModal.open({
             animation: true,
@@ -157,25 +222,29 @@ app.service('common', [ '$uibModal', 'globals', function($uibModal, globals) {
         });
 
         modalInstance.result.then(
-            function () { callback(true); },
-            function (ret) { callback(false); }
+            function () {
+                callback(true);
+            },
+            function (ret) {
+                callback(false);
+            }
         );
     };
 
-    this.alert = { text: '', type: '' };
-    
-    this.showMessage = function(msg) {
+    this.alert = {text: '', type: ''};
+
+    this.showMessage = function (msg) {
         this.alert.type = 'alert-success';
         this.alert.text = msg;
     };
 
-    this.showError = function(msg) {
+    this.showError = function (msg) {
         this.alert.type = 'alert-danger';
         this.alert.text = msg;
     };
 
-    this.stamp2date = function(stamp) {
+    this.stamp2date = function (stamp) {
         return new Date(stamp).toLocaleString();
     };
-    
+
 }]);
