@@ -321,15 +321,11 @@ module.exports = function (url, req, rep, query, payload, session) {
                         lib.sendJSONWithError(rep, 401, 'Invalid credentials');
                         return;
                     }
-                    common.accounts.aggregate().toArray(function (x, y) {
-                        console.log(y);
-                    });
                     common.accounts.findOne(payload, {}, function (err, account) {
                         if (err || !account) {
                             lib.sendJSONWithError(rep, 401, 'Bad password');
                             return;
                         }
-                        console.log('account', account);
                         common.sessions[session].accountNo = account._id;
                         common.sessions[session].email = account.email;
                         common.sessions[session].role = account.role;
